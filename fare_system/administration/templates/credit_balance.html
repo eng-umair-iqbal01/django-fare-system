@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Credit Balance{% endblock %}
+
+{% block content %}
+<h3>Credit Student Balance</h3>
+<form method="POST">
+    {% csrf_token %}
+    <label>Student ID:</label>
+    <input type="text" name="student_id" required>
+    <label>Amount:</label>
+    <input type="number" name="amount" required>
+    <button type="submit" class="btn btn-success">Credit</button>
+</form>
+{% endblock %}

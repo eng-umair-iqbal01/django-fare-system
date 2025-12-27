@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4 text-center">Admin Dashboard</h2>
+
+    {% if messages %}
+        <div class="messages mb-4">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Quick Actions</h5>
+                    <div class="d-flex justify-content-center flex-wrap gap-3 mt-2">
+                        <a href="{% url 'add_student' %}" class="btn btn-primary">Add Student</a>
+                        <a href="{% url 'add_bus_driver' %}" class="btn btn-success">Add Bus Driver</a>
+                        <a href="{% url 'add_bus' %}" class="btn btn-info">Add Bus</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Buses -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
+                    <h4>Buses</h4>
+                    <span class="badge bg-light text-primary">Total: {{ buses|length }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped align-middle">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Bus Number</th>
+                                    <th>Route</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for bus in buses %}
+                                <tr>
+                                    <td>{{ bus.bus_number }}</td>
+                                    <td>{{ bus.route_name }}</td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <a href="{% url 'update_bus' bus.id %}" class="btn btn-sm btn-warning">Edit</a>
+                                            <a href="{% url 'delete_bus' bus.id %}" class="btn btn-sm btn-danger">Delete</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">No buses yet. <a href="{% url 'add_bus' %}">Add a bus</a></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bus Drivers -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center bg-success text-white">
+                    <h4>Bus Drivers</h4>
+                    <span class="badge bg-light text-success">Total: {{ drivers|length }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped align-middle">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Full Name</th>
+                                    <th>Username</th>
+                                    <th>Assigned Bus</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for driver in drivers %}
+                                <tr>
+                                    <td>{{ driver.full_name }}</td>
+                                    <td>{{ driver.user.username }}</td>
+                                    <td>
+                                        {% if driver.bus %}
+                                            {{ driver.bus.bus_number }} - {{ driver.bus.route_name }}
+                                        {% else %}
+                                            <span class="text-danger">Not Assigned</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <a href="{% url 'update_bus_driver' driver.id %}" class="btn btn-sm btn-warning">Edit</a>
+                                            <a href="{% url 'delete_bus_driver' driver.id %}" class="btn btn-sm btn-danger">Delete</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">No drivers yet. <a href="{% url 'add_bus_driver' %}">Add a driver</a></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Students -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center bg-info text-white">
+                    <h4>Students</h4>
+                    <span class="badge bg-light text-info">Total: {{ students|length }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped align-middle">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Full Name</th>
+                                    <th>Balance</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for student in students %}
+                                <tr>
+                                    <td>{{ student.student_id }}</td>
+                                    <td>{{ student.full_name }}</td>
+                                    <td>{{ student.balance }} PKR</td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <a href="{% url 'update_student' student.student_id %}" class="btn btn-sm btn-warning">Edit</a>
+                                            <a href="{% url 'delete_student' student.student_id %}" class="btn btn-sm btn-danger">Delete</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">No students yet. <a href="{% url 'add_student' %}">Add a student</a></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

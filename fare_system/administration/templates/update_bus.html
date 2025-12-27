@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Update Bus{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Update Bus</h2>
+
+    {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <form method="POST">
+        {% csrf_token %}
+        <div class="mb-3">
+            <label for="bus_number" class="form-label">Bus Number</label>
+            <input type="text" class="form-control" id="bus_number" name="bus_number" value="{{ bus.bus_number }}" required>
+        </div>
+        
+        <div class="mb-3">
+            <label for="route_name" class="form-label">Route</label>
+            <input type="text" class="form-control" id="route_name" name="route_name" value="{{ bus.route_name }}" required>
+        </div>
+        
+        <div class="mb-3">
+            <label for="bus_driver" class="form-label">Driver</label>
+            <select class="form-select" id="bus_driver" name="bus_driver">
+                <option value="">-- Select Driver --</option>
+                {% for driver in drivers %}
+                    <option value="{{ driver.id }}" {% if current_driver and driver.id == current_driver.id %}selected{% endif %}>
+                        {{ driver.full_name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <button type="submit" class="btn btn-success">Update Bus</button>
+        <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

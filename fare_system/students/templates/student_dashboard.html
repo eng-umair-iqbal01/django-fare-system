@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+{% block title %}Student Dashboard{% endblock %}
+
+{% block content %}
+<!-- Add Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+<div class="container mt-4">
+    <!-- Welcome and Details -->
+    <div class="card shadow-lg p-4 mb-4 rounded-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h3>Welcome, {{ student.full_name }}</h3>
+                <p><strong>Student ID:</strong> {{ student.student_id }}</p>
+                <p><strong>Balance:</strong> Rs. {{ student.balance }}</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'change_password' %}" class="btn btn-warning">Change Password</a>
+                <a href="{% url 'face_enrollment' %}" class="btn btn-success">Enroll Your Face</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bus List and Search -->
+    <div class="card shadow-lg rounded-3">
+        <div class="card-header d-flex justify-content-between align-items-center bg-dark text-white">
+            <h4 class="m-0">Bus List and Current Status</h4>
+            <div class="input-group" style="max-width: 300px;">
+                <input type="text" id="searchInput" class="form-control" placeholder="Search by Bus Number or Route..." onkeyup="searchBus()">
+                <button class="btn btn-primary" onclick="searchBus()">Search</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped table-bordered mb-0" id="busTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width: 40px"></th>
+                            <th>Bus Number</th>
+                            <th>Route</th>
+                            <th>Current Location</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bus in buses %}
+                        <tr data-bus-id="{{ bus.id }}">
+                            <td>
+                                <button class="btn btn-sm btn-info" onclick="toggleMap('{{ bus.id }}')">
+                                    <i class="fas fa-map-marker-alt"></i>
+                                </button>
+                            </td>
+                            <td>{{ bus.bus_number }}</td>
+                            <td>{{ bus.route_name }}</td>
+                            <td>{{ bus.current_stop|default:"Not Assigned" }}</td>
+                        </tr>
+                        <tr id="map-row-{{ bus.id }}" class="map-row" style="display: none;">
+                            <td colspan="4" class="p-0">
+                                <div id="map-{{ bus.id }}" style="height: 300px;" class="w-100"></div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted">No buses available.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include SweetAlert -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<!-- Include Font Awesome for icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<!-- Include Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<!-- JavaScript for Search and Maps Functionality -->
+<script>
+    const maps = {};
+    const markers = {};
+    let activeMapRow = null;
+
+    function searchBus() {
+        const input = document.getElementById("searchInput").value.toLowerCase();
+        const table = document.getElementById("busTable");
+        const rows = table.getElementsByTagName("tr");
+        let found = false;
+
+        for (let i = 1; i < rows.length; i++) {
+            if (rows[i].classList.contains('map-row')) continue;
+            
+            const busNumber = rows[i].getElementsByTagName("td")[1].textContent.toLowerCase();
+            const routeName = rows[i].getElementsByTagName("td")[2].textContent.toLowerCase();
+            const match = busNumber.includes(input) || routeName.includes(input);
+
+            if (match) {
+                rows[i].style.display = "";
+                found = true;
+            } else {
+                rows[i].style.display = "none";
+                // Hide corresponding map row
+                const busId = rows[i].getAttribute('data-bus-id');
+                if (busId) {
+                    const mapRow = document.getElementById(`map-row-${busId}`);
+                    if (mapRow) mapRow.style.display = "none";
+                }
+            }
+        }
+
+        if (!found && input) {
+            Swal.fire({
+                icon: "warning",
+                title: "No Results Found",
+                text: `No bus found for "${input}".`,
+                timer: 1500,
+                showConfirmButton: false,
+            });
+        }
+    }
+
+    function toggleMap(busId) {
+        const mapRow = document.getElementById(`map-row-${busId}`);
+        
+        // Close currently open map if it's different from the one being opened
+        if (activeMapRow && activeMapRow !== mapRow) {
+            activeMapRow.style.display = "none";
+        }
+
+        // Toggle the clicked map
+        if (mapRow.style.display === "none") {
+            mapRow.style.display = "table-row";
+            activeMapRow = mapRow;
+            initializeMap(busId);
+            startLocationUpdates(busId);
+        } else {
+            mapRow.style.display = "none";
+            activeMapRow = null;
+            stopLocationUpdates(busId);
+        }
+    }
+
+    function initializeMap(busId) {
+        if (!maps[busId]) {
+            const mapDiv = document.getElementById(`map-${busId}`);
+            // Initialize the map with OpenStreetMap
+            maps[busId] = L.map(mapDiv).setView([0, 0], 13);
+            
+            // Add OpenStreetMap tile layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(maps[busId]);
+
+            // Create a marker for the bus
+            markers[busId] = L.marker([0, 0]).addTo(maps[busId]);
+        }
+        updateBusLocation(busId);
+    }
+
+    function updateBusLocation(busId) {
+        // Fetch the current location from your backend
+        fetch(`/students/bus-location/${busId}/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.location) {
+                    const position = {
+                        lat: data.location.lat,
+                        lng: data.location.lng
+                    };
+                    
+                    // Update marker position and map center
+                    markers[busId].setLatLng(position);
+                    maps[busId].setView(position, 15);
+                    
+                    // Add a popup with the address
+                    markers[busId].bindPopup(data.location.address).openPopup();
+                    
+                    // Update the location text in the table
+                    const locationCell = document.querySelector(`tr[data-bus-id="${busId}"] td:last-child`);
+                    if (locationCell) {
+                        locationCell.textContent = data.location.address;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching bus location:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Location Error',
+                    text: 'Unable to fetch bus location.',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            });
+    }
+
+    const locationUpdates = {};
+
+    function startLocationUpdates(busId) {
+        // Update location every 10 seconds
+        locationUpdates[busId] = setInterval(() => {
+            updateBusLocation(busId);
+        }, 10000);
+    }
+
+    function stopLocationUpdates(busId) {
+        if (locationUpdates[busId]) {
+            clearInterval(locationUpdates[busId]);
+            delete locationUpdates[busId];
+        }
+    }
+
+    // Clean up when leaving the page
+    window.addEventListener('beforeunload', () => {
+        Object.keys(locationUpdates).forEach(busId => {
+            stopLocationUpdates(busId);
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}Update Bus Location{% endblock %}
+
+{% block content %}
+<h3>Update Bus Location</h3>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert {% if message.tags %}alert-{{ message.tags }}{% endif %}">
+            {{ message }}
+        </div>
+    {% endfor %}
+{% endif %}
+
+{% if bus %}
+    <p>Bus Number: <strong>{{ bus.bus_number }}</strong></p>
+    <p>Current Stop: <strong>{{ bus.current_stop }}</strong></p>
+
+    <form method="POST">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="current_stop">New Stop:</label>
+            <input type="text" name="current_stop" id="current_stop" class="form-control" placeholder="Enter new bus stop">
+        </div>
+        <button type="submit" class="btn btn-primary">Update Location</button>
+    </form>
+{% else %}
+    <p>No bus assigned to this account.</p>
+{% endif %}
+{% endblock %}

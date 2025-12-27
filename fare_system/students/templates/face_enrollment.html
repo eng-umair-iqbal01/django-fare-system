@@ -1,0 +1,325 @@
+{% extends 'base.html' %}
+{% block title %}Face Enrollment{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h3>Face Enrollment</h3>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h5>Instructions for best face recognition:</h5>
+                        <ul>
+                            <li>We'll take 5 photos of your face from different angles</li>
+                            <li>Ensure good lighting on your face</li>
+                            <li>Follow the on-screen instructions for each pose</li>
+                            <li>Keep your head within the circle guide</li>
+                            <li>Remove glasses, hats, or other items that cover your face</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="text-center position-relative">
+                        <video id="video" width="320" height="240" autoplay></video>
+                        <canvas id="canvas" width="320" height="240" style="display: none;"></canvas>
+                        
+                        <!-- Face position guide overlay -->
+                        <div id="faceGuide" style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 200px; height: 200px; border: 2px dashed #aaa; border-radius: 50%; margin-top: 20px;"></div>
+                        
+                        <!-- Pose guide arrows -->
+                        <div id="poseGuide" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 40px; color: rgba(255,255,255,0.7); text-shadow: 1px 1px 2px #000; display: none;">
+                            <i id="poseArrow" class="fas fa-arrow-up"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 text-center">
+                        <div id="poseInstructions" class="alert alert-primary">
+                            Look directly at the camera, keeping a neutral expression
+                        </div>
+                        
+                        <button id="captureBtn" onclick="captureFace()" class="btn btn-primary">
+                            Capture Face
+                        </button>
+                        <button id="startOverBtn" onclick="startOver()" class="btn btn-secondary" style="display: none;">
+                            Start Over
+                        </button>
+                    </div>
+
+                    <div class="mt-3">
+                        <div class="alert" id="statusContainer" style="display: none;">
+                            <p id="status"></p>
+                        </div>
+                        
+                        <!-- Overall progress bar -->
+                        <div class="mt-3">
+                            <h5>Enrollment Progress: <span id="progressText">0%</span></h5>
+                            <div class="progress">
+                                <div id="enrollmentProgress" class="progress-bar bg-primary" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                            <div class="text-center mt-2">
+                                <small id="angleStatus">0 of 5 angles captured</small>
+                            </div>
+                        </div>
+                        
+                        <!-- Capture progress -->
+                        <div class="progress mt-3" id="captureProgress" style="display: none;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    
+                    <div id="qualityIndicator" class="mt-3 text-center" style="display: none;">
+                        <h5>Face Quality: <span id="qualityRating">Unknown</span></h5>
+                        <div class="progress">
+                            <div id="qualityBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let video;
+let canvas;
+let statusElement;
+let statusContainer;
+let captureProgress;
+let progressBarInner;
+let captureBtn;
+let startOverBtn;
+let qualityIndicator;
+let qualityRating;
+let qualityBar;
+let poseInstructions;
+let poseGuide;
+let poseArrow;
+let enrollmentProgress;
+let progressText;
+let angleStatus;
+let capturing = false;
+let captureInterval;
+
+// Enrollment angles sequence
+const angles = [
+    { name: "center", instruction: "Look directly at the camera, keeping a neutral expression", arrow: "none" },
+    { name: "right", instruction: "Slightly turn your face to the right", arrow: "right" },
+    { name: "left", instruction: "Slightly turn your face to the left", arrow: "left" },
+    { name: "up", instruction: "Slightly tilt your chin up", arrow: "up" },
+    { name: "down", instruction: "Slightly tilt your chin down", arrow: "down" }
+];
+
+let currentAngleIndex = 0;
+let capturedAngles = [];
+
+// Initialize elements when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    video = document.getElementById("video");
+    canvas = document.getElementById("canvas");
+    statusElement = document.getElementById("status");
+    statusContainer = document.getElementById("statusContainer");
+    captureProgress = document.getElementById("captureProgress");
+    progressBarInner = document.querySelector(".progress-bar");
+    captureBtn = document.getElementById("captureBtn");
+    startOverBtn = document.getElementById("startOverBtn");
+    qualityIndicator = document.getElementById("qualityIndicator");
+    qualityRating = document.getElementById("qualityRating");
+    qualityBar = document.getElementById("qualityBar");
+    poseInstructions = document.getElementById("poseInstructions");
+    poseGuide = document.getElementById("poseGuide");
+    poseArrow = document.getElementById("poseArrow");
+    enrollmentProgress = document.getElementById("enrollmentProgress");
+    progressText = document.getElementById("progressText");
+    angleStatus = document.getElementById("angleStatus");
+    
+    // Access the webcam with high resolution if possible
+    navigator.mediaDevices.getUserMedia({ 
+        video: { 
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: "user"
+        } 
+    })
+    .then((stream) => {
+        video.srcObject = stream;
+        showStatus("Camera ready. Follow the instructions and click 'Capture Face'", "info");
+        updatePoseInstructions();
+    })
+    .catch((err) => {
+        showStatus("Error accessing camera: " + err.message, "danger");
+    });
+});
+
+function showStatus(message, type) {
+    statusElement.textContent = message;
+    statusContainer.style.display = "block";
+    statusContainer.className = "alert alert-" + type;
+}
+
+function updateProgress(value) {
+    progressBarInner.style.width = value + "%";
+}
+
+function updatePoseInstructions() {
+    if (currentAngleIndex < angles.length) {
+        const angle = angles[currentAngleIndex];
+        poseInstructions.textContent = angle.instruction;
+        
+        // Show arrow guide
+        if (angle.arrow === "none") {
+            poseGuide.style.display = "none";
+        } else {
+            poseGuide.style.display = "block";
+            poseArrow.className = `fas fa-arrow-${angle.arrow}`;
+        }
+    } else {
+        poseInstructions.textContent = "All poses captured! Your face is now enrolled.";
+        poseGuide.style.display = "none";
+        captureBtn.style.display = "none";
+        startOverBtn.style.display = "inline-block";
+    }
+}
+
+function updateQualityIndicator(faceWidth, faceHeight) {
+    // Simple quality calculation based on face size
+    const idealWidth = 150;
+    const idealHeight = 150;
+    
+    // Calculate quality percentage (how close to ideal size)
+    const widthQuality = Math.min(faceWidth / idealWidth * 100, 100);
+    const heightQuality = Math.min(faceHeight / idealHeight * 100, 100);
+    const quality = Math.min(widthQuality, heightQuality);
+    
+    qualityBar.style.width = quality + "%";
+    
+    // Set color and rating based on quality
+    if (quality >= 80) {
+        qualityBar.className = "progress-bar bg-success";
+        qualityRating.textContent = "Excellent";
+    } else if (quality >= 60) {
+        qualityBar.className = "progress-bar bg-info";
+        qualityRating.textContent = "Good";
+    } else if (quality >= 40) {
+        qualityBar.className = "progress-bar bg-warning";
+        qualityRating.textContent = "Fair";
+    } else {
+        qualityBar.className = "progress-bar bg-danger";
+        qualityRating.textContent = "Poor - Move Closer";
+    }
+    
+    qualityIndicator.style.display = "block";
+}
+
+function updateEnrollmentProgress(progress, anglesCount, totalRequired) {
+    enrollmentProgress.style.width = progress + "%";
+    progressText.textContent = Math.round(progress) + "%";
+    angleStatus.textContent = `${anglesCount} of ${totalRequired} angles captured`;
+    
+    if (progress >= 100) {
+        showStatus("Face enrollment complete! You can now use face recognition.", "success");
+        captureBtn.style.display = "none";
+        startOverBtn.style.display = "inline-block";
+    }
+}
+
+function captureFace() {
+    if (capturing || currentAngleIndex >= angles.length) return;
+    capturing = true;
+    
+    // Show progress
+    captureProgress.style.display = "block";
+    updateProgress(0);
+    
+    // Disable capture button during process
+    captureBtn.disabled = true;
+    
+    showStatus(`Capturing ${angles[currentAngleIndex].name} angle... Please hold still`, "info");
+    
+    // Initialize progress counter
+    let progress = 0;
+    const progressIncrement = 100 / 15; // 15 steps to reach 100% (1.5 seconds)
+    
+    // Update progress bar every 100ms
+    captureInterval = setInterval(() => {
+        progress += progressIncrement;
+        if (progress > 100) progress = 100;
+        updateProgress(progress);
+        
+        if (progress >= 100) {
+            clearInterval(captureInterval);
+            processCapture(); // Capture when progress reaches 100%
+        }
+    }, 100);
+}
+
+function processCapture() {
+    const context = canvas.getContext("2d");
+    
+    // Draw the current video frame onto the canvas
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Convert the canvas image to a base64 data URL
+    const imageData = canvas.toDataURL("image/jpeg");
+    
+    // Send the image data to the server
+    fetch("{% url 'face_enrollment' %}", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-CSRFToken": "{{ csrf_token }}"
+        },
+        body: "image_data=" + encodeURIComponent(imageData) + "&angle=" + encodeURIComponent(angles[currentAngleIndex].name)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.status === "success") {
+            // Add to captured angles
+            capturedAngles.push(angles[currentAngleIndex].name);
+            
+            // Update progress
+            updateEnrollmentProgress(result.progress, result.angles_count, result.total_required);
+            
+            // Show face quality metrics if available
+            if (result.face_width && result.face_height) {
+                updateQualityIndicator(result.face_width, result.face_height);
+            }
+            
+            // Move to next angle
+            currentAngleIndex++;
+            updatePoseInstructions();
+            
+            if (result.complete) {
+                showStatus("Face enrollment complete! All angles captured.", "success");
+                captureBtn.style.display = "none";
+                startOverBtn.style.display = "inline-block";
+            } else {
+                showStatus(result.message, "success");
+            }
+        } else {
+            showStatus(result.message, "danger");
+        }
+    })
+    .catch(error => {
+        showStatus("Error communicating with server: " + error.message, "danger");
+    })
+    .finally(() => {
+        capturing = false;
+        captureBtn.disabled = false;
+        captureProgress.style.display = "none";
+    });
+}
+
+function startOver() {
+    currentAngleIndex = 0;
+    capturedAngles = [];
+    updatePoseInstructions();
+    updateEnrollmentProgress(0, 0, angles.length);
+    qualityIndicator.style.display = "none";
+    captureBtn.style.display = "inline-block";
+    startOverBtn.style.display = "none";
+    showStatus("Starting over. Follow the instructions and click 'Capture Face'", "info");
+}
+</script>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block title %}Approve Payment{% endblock %}
+
+{% block content %}
+<h3>Approve Fare Deduction</h3>
+<p>Amount: Rs. {{ transaction.amount }}</p>
+<p>Status: {{ transaction.status }}</p>
+{% if transaction.status == "Pending" %}
+    <a href="{% url 'approve_payment' transaction.id %}" class="btn btn-success">Approve</a>
+{% else %}
+    <p>Transaction already approved.</p>
+{% endif %}
+{% endblock %}

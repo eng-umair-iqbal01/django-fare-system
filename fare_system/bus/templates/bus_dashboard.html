@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% block title %}Bus Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h3 class="mb-4 text-center">Bus Dashboard</h3>
+
+    {% if bus %}
+        <div class="card shadow-sm p-4">
+            <div class="card-body">
+                <h4 class="card-title text-primary">Bus Information</h4>
+                <p class="card-text">Bus Number: <strong>{{ bus.bus_number }}</strong></p>
+                <p class="card-text">Route: <strong>{{ bus.route_name }}</strong></p>
+                <p class="card-text">Current Stop/Location: <strong id="current-location">{{ bus.current_stop }}</strong></p>
+                <p class="card-text">Location Status: <span id="location-status" class="badge bg-secondary">Not sharing</span></p>
+            </div>
+            <div class="card-footer d-flex justify-content-between">
+                <button id="locationToggle" class="btn btn-primary" onclick="toggleLocationSharing()">
+                    Start Location Sharing
+                </button>
+                <a href="{% url 'recognize_face' %}" class="btn btn-success">
+                    Start Face Recognition
+                </a>
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-warning mt-4" role="alert">
+             No bus assigned to this account.
+        </div>
+    {% endif %}
+</div>
+
+<script>
+    let watchId = null;
+    let isSharing = false;
+    const locationToggleBtn = document.getElementById('locationToggle');
+    const locationStatus = document.getElementById('location-status');
+
+    function toggleLocationSharing() {
+        if (!isSharing) {
+            startLocationSharing();
+        } else {
+            stopLocationSharing();
+        }
+    }
+
+    function startLocationSharing() {
+        if (navigator.geolocation) {
+            // Update UI
+            isSharing = true;
+            locationToggleBtn.textContent = 'Stop Location Sharing';
+            locationToggleBtn.classList.remove('btn-primary');
+            locationToggleBtn.classList.add('btn-danger');
+            locationStatus.textContent = 'Sharing location';
+            locationStatus.classList.remove('bg-secondary');
+            locationStatus.classList.add('bg-success');
+
+            // Start continuous location watching
+            watchId = navigator.geolocation.watchPosition(success, error, {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 0
+            });
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Oops...',
+                text: 'Geolocation is not supported by this browser.',
+            });
+        }
+    }
+
+    function stopLocationSharing() {
+        if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+        }
+        
+        // Update UI
+        isSharing = false;
+        locationToggleBtn.textContent = 'Start Location Sharing';
+        locationToggleBtn.classList.remove('btn-danger');
+        locationToggleBtn.classList.add('btn-primary');
+        locationStatus.textContent = 'Not sharing';
+        locationStatus.classList.remove('bg-success');
+        locationStatus.classList.add('bg-secondary');
+    }
+
+    function success(position) {
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+
+        // Reverse Geocoding using OpenStreetMap's Nominatim API
+        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`)
+            .then(response => response.json())
+            .then(data => {
+                const locationName = data.display_name || `Lat: ${latitude}, Long: ${longitude}`;
+                
+                // Update the UI with the location name
+                document.getElementById("current-location").innerText = locationName;
+
+                // Send the location to the backend
+                fetch("{% url 'update_location' %}", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": "{{ csrf_token }}"
+                    },
+                    body: JSON.stringify({ location: locationName })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        console.error("Failed to update location on server");
+                        stopLocationSharing();
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Update Failed',
+                            text: 'Failed to update location on server.',
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error("Error updating location:", error);
+                    stopLocationSharing();
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'An error occurred while updating location.',
+                    });
+                });
+            })
+            .catch(error => {
+                console.error("Reverse geocoding error:", error);
+                stopLocationSharing();
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Geocoding Error',
+                    text: 'Failed to get location name.',
+                });
+            });
+    }
+
+    function error(err) {
+        console.error("Location error:", err);
+        stopLocationSharing();
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: `Location error: ${err.message}`,
+        });
+    }
+
+    // Clean up when leaving the page
+    window.addEventListener('beforeunload', () => {
+        if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId);
+        }
+    });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+{% endblock %}

@@ -1,0 +1,276 @@
+{% extends 'base.html' %}
+{% block title %}Face Recognition{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h3>Face Recognition</h3>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h5>Tips for successful recognition:</h5>
+                        <ul>
+                            <li>Position your face in the center of the frame</li>
+                            <li>Ensure good lighting on your face</li>
+                            <li>Look directly at the camera</li>
+                            <li>Keep the same facial expression as when you enrolled</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="text-center position-relative">
+                        <video id="video" width="320" height="240" autoplay></video>
+                        <canvas id="canvas" width="320" height="240" style="display: none;"></canvas>
+                        <canvas id="debugCanvas" width="320" height="240" style="display: none;"></canvas>
+                        
+                        <!-- Face position guide overlay -->
+                        <div id="faceGuide" style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 200px; height: 200px; border: 2px dashed #aaa; border-radius: 50%; margin-top: 20px;"></div>
+                    </div>
+                    
+                    <div class="mt-3 text-center">
+                        <button id="startBtn" onclick="startRecognition()" class="btn btn-primary">
+                            Start Face Recognition
+                        </button>
+                        <button id="stopBtn" onclick="stopRecognition()" class="btn btn-danger" style="display: none;">
+                            Stop Recognition
+                        </button>
+                        <div class="form-check form-switch mt-2 d-inline-block ms-3">
+                            <input class="form-check-input" type="checkbox" id="showDebugInfo">
+                            <label class="form-check-label" for="showDebugInfo">Show Debug Info</label>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <div class="alert" id="statusContainer" style="display: none;">
+                            <p id="status"></p>
+                        </div>
+                        <div class="progress" id="progressBar" style="display: none;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    
+                    <div id="debugInfo" class="mt-3" style="display: none;">
+                        <h5>Debug Information:</h5>
+                        <div id="debugText" class="border p-2 bg-light">No data yet</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let video;
+let canvas;
+let debugCanvas;
+let statusElement;
+let statusContainer;
+let progressBar;
+let progressBarInner;
+let startBtn;
+let stopBtn;
+let debugInfo;
+let debugText;
+let showDebugInfo;
+let captureInterval;
+let recognitionTimeout;
+let stream;
+
+// Initialize elements when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    video = document.getElementById("video");
+    canvas = document.getElementById("canvas");
+    debugCanvas = document.getElementById("debugCanvas");
+    statusElement = document.getElementById("status");
+    statusContainer = document.getElementById("statusContainer");
+    progressBar = document.getElementById("progressBar");
+    progressBarInner = document.querySelector(".progress-bar");
+    startBtn = document.getElementById("startBtn");
+    stopBtn = document.getElementById("stopBtn");
+    debugInfo = document.getElementById("debugInfo");
+    debugText = document.getElementById("debugText");
+    showDebugInfo = document.getElementById("showDebugInfo");
+    
+    // Toggle debug info
+    showDebugInfo.addEventListener('change', function() {
+        debugInfo.style.display = this.checked ? 'block' : 'none';
+        debugCanvas.style.display = this.checked ? 'block' : 'none';
+        if (this.checked) {
+            document.querySelector('.position-relative').appendChild(debugCanvas);
+        }
+    });
+    
+    // Access the webcam with high resolution if possible
+    startCamera();
+});
+
+function startCamera() {
+    navigator.mediaDevices.getUserMedia({ 
+        video: { 
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: "user"
+        } 
+    })
+    .then((videoStream) => {
+        stream = videoStream;
+        video.srcObject = stream;
+        showStatus("Camera ready. Click 'Start Face Recognition' when ready.", "info");
+    })
+    .catch((err) => {
+        showStatus("Error accessing camera: " + err.message, "danger");
+    });
+}
+
+function showStatus(message, type) {
+    statusElement.textContent = message;
+    statusContainer.style.display = "block";
+    statusContainer.className = "alert alert-" + type;
+}
+
+function updateProgress(value) {
+    progressBarInner.style.width = value + "%";
+}
+
+function drawFaceBox(rect) {
+    if (!showDebugInfo.checked) return;
+    
+    const context = debugCanvas.getContext('2d');
+    context.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+    
+    // Draw the video frame first
+    context.drawImage(video, 0, 0, debugCanvas.width, debugCanvas.height);
+    
+    // Draw face box
+    context.strokeStyle = '#00ff00';
+    context.lineWidth = 2;
+    context.strokeRect(rect.left, rect.top, rect.width, rect.height);
+    
+    // Add text for face size
+    context.fillStyle = '#00ff00';
+    context.font = '12px Arial';
+    context.fillText(`Face size: ${rect.width}x${rect.height}px`, 10, 20);
+}
+
+async function captureFrame() {
+    const context = canvas.getContext("2d");
+
+    // Draw the current video frame onto the canvas
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Convert the canvas image to a base64 data URL
+    const imageData = canvas.toDataURL("image/jpeg");
+
+    try {
+        // Update debug info
+        if (showDebugInfo.checked) {
+            debugText.innerHTML = "Sending image data to server...";
+        }
+        
+        // Send the image data to the server
+        const response = await fetch("{% url 'recognize_face' %}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "X-CSRFToken": "{{ csrf_token }}"
+            },
+            body: "image_data=" + encodeURIComponent(imageData)
+        });
+
+        const result = await response.json();
+        
+        // Update debug info
+        if (showDebugInfo.checked) {
+            debugText.innerHTML = `Server response: ${JSON.stringify(result, null, 2)}`;
+        }
+        
+        // Show appropriate status message based on result
+        if (result.status === "success") {
+            showStatus(result.message, "success");
+            stopRecognition(); // Stop capturing if successful
+        } else if (result.status === "info") {
+            showStatus(result.message, "info");
+            stopRecognition(); // Stop capturing if already checked in
+        } else {
+            showStatus(result.message, "warning");
+            // Continue recognition attempts
+        }
+    } catch (error) {
+        showStatus("Error communicating with server: " + error.message, "danger");
+        if (showDebugInfo.checked) {
+            debugText.innerHTML = `Error: ${error.message}`;
+        }
+    }
+}
+
+function startRecognition() {
+    // Hide start button, show stop button
+    startBtn.style.display = "none";
+    stopBtn.style.display = "inline-block";
+    
+    showStatus("Scanning face... Please look at the camera", "info");
+    
+    // Show the progress bar
+    progressBar.style.display = "block";
+    updateProgress(100); // Full animation
+    
+    // Capture frame immediately and then every 3 seconds
+    captureFrame();
+    captureInterval = setInterval(captureFrame, 3000);
+    
+    // Auto-stop after 30 seconds if no match
+    recognitionTimeout = setTimeout(() => {
+        if (captureInterval) {
+            showStatus("Recognition timeout. Please try again.", "warning");
+            stopRecognition();
+        }
+    }, 30000);
+    
+    // If debug mode is on, start face tracking
+    if (showDebugInfo.checked) {
+        debugCanvas.style.display = "block";
+        trackFaces();
+    }
+}
+
+function trackFaces() {
+    if (!showDebugInfo.checked || !captureInterval) return;
+    
+    const context = debugCanvas.getContext('2d');
+    context.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+    context.drawImage(video, 0, 0, debugCanvas.width, debugCanvas.height);
+    
+    // Here we'd ideally use face-api.js or a similar library for real-time face tracking
+    // For now, we'll just show the frame and guide
+    
+    setTimeout(trackFaces, 100); // Update every 100ms
+}
+
+function stopRecognition() {
+    if (captureInterval) {
+        clearInterval(captureInterval);
+        captureInterval = null;
+    }
+    
+    if (recognitionTimeout) {
+        clearTimeout(recognitionTimeout);
+    }
+    
+    // Hide progress bar
+    progressBar.style.display = "none";
+    
+    // Show start button, hide stop button
+    startBtn.style.display = "inline-block";
+    stopBtn.style.display = "none";
+    
+    // Clear debug canvas
+    if (debugCanvas) {
+        const context = debugCanvas.getContext('2d');
+        context.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+    }
+}
+
+</script>
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block title %}Add Student{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h3 class="mb-4 text-center">Add Student</h3>
+
+    {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ error }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endif %}
+
+    <div class="card shadow-sm p-4">
+        <form method="POST" class="needs-validation" novalidate>
+            {% csrf_token %}
+
+            <!-- Full Name -->
+            <div class="mb-3">
+                <label for="fullName" class="form-label">Full Name:</label>
+                <input type="text" name="full_name" id="fullName" class="form-control" placeholder="John Doe" required>
+                <div class="invalid-feedback">Please enter a full name.</div>
+            </div>
+
+            <!-- Student ID -->
+            <div class="mb-3">
+                <label for="studentId" class="form-label">Student ID (used as username):</label>
+                <input type="number" name="student_id" id="studentId" class="form-control" placeholder="12345" required>
+                <div class="invalid-feedback">Please enter a valid student ID.</div>
+            </div>
+
+            <!-- Starting Balance -->
+            <div class="mb-3">
+                <label for="balance" class="form-label">Starting Balance (PKR):</label>
+                <input type="number" name="balance" id="balance" class="form-control" step="0.01" placeholder="1000.00" required>
+                <div class="invalid-feedback">Please enter a valid balance amount.</div>
+            </div>
+
+            <!-- Password -->
+            <div class="mb-3">
+                <label for="password" class="form-label">Password:</label>
+                <input type="password" name="password" id="password" class="form-control" placeholder="••••••••" required>
+                <div class="invalid-feedback">Password is required.</div>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary">Add Student</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // Bootstrap 5 Form Validation
+    (function () {
+        'use strict'
+        const forms = document.querySelectorAll('.needs-validation')
+        Array.from(forms).forEach(form => {
+            form.addEventListener('submit', event => {
+                if (!form.checkValidity()) {
+                    event.preventDefault()
+                    event.stopPropagation()
+                }
+                form.classList.add('was-validated')
+            }, false)
+        })
+    })()
+</script>
+{% endblock %}

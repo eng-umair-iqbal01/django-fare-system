@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Bus List</h2>
+    <a href="{% url 'add_bus' %}" class="btn btn-primary mb-3">Add Bus</a>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Bus Number</th>
+                <th>Route</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for bus in buses %}
+            <tr>
+                <td>{{ bus.bus_number }}</td>
+                <td>{{ bus.route }}</td>
+                <td>
+                    <a href="{% url 'update_bus' bus.id %}" class="btn btn-warning">Edit</a>
+                    <a href="{% url 'delete_bus' bus.id %}" class="btn btn-danger"
+                        onclick="return confirm('Are you sure?')">Delete</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
